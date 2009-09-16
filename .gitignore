@@ -1,0 +1,5 @@
+*~
+*.pyc
+Mnesia.*
+sasl_err*
+erl_crash*
