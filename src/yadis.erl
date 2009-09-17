@@ -84,7 +84,7 @@ get_descriptor_url([_|Rest]) ->
 get_meta(Rest) ->
     Content = get_meta_content(Rest, []),
     case re:run(string:to_lower(Content),
-                "([a-z0-9-]+)\s*=\s*[\"'](.*?)[\"']",
+                "([a-z0-9-]+)\s*=\s*[\"'](.*?)[\"']", % "
                 [{capture, all_but_first, list}, global]) of
         {match, Bits} -> check_meta([{K,V} || [K,V] <- Bits], Rest);
         _ -> get_descriptor_url(Rest)
