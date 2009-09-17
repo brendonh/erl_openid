@@ -15,18 +15,43 @@
 retrieve(YadisURL) ->
     application:start(inets),
     application:start(ssl),
+
+    case http:request(get, {YadisURL, [{"accept", "application/xrds+xml"}]}, [], []) of
+        {ok, {_Status, Headers, Body}} ->
+            DescriptorURL = get_descriptor_url(Headers, Body),
+            handle_response(DescriptorURL, Headers, Body);
+        Other ->
+            {error, {http_error, {YadisURL, Other}}}
+    end.
+
+
+handle_response(none, Headers, Body) ->
+    get_xrds(?GVD("content-type", Headers, none), Body);
+handle_response(URL, _Headers, _Body) ->
+    try_descriptor_url(URL).
+
+
+get_xrds("application/xrds+xml" ++ _Rest, Body) -> Body;
+get_xrds("text/xml" ++ _Rest, Body) -> Body; % Against the spec, but LiveJournal does it.
+get_xrds(Other, _Body) -> {error, {not_xrds, Other}}.
     
+
+try_descriptor_url(none) -> {error, no_descriptor_url};
+try_descriptor_url(URL) -> retrieve_step_two(URL).
+
+
+retrieve_step_two(YadisURL) ->
     case http:request(get, {YadisURL, [{"accept", "application/xrds+xml"},
                                        {"connection", "Close"}]},
                       [], []) of
         {ok, {_Status, Headers, Body}} ->
-            DescriptorURL = get_descriptor_url(Headers, Body),
-            ?DBG({descriptor_url, DescriptorURL});
+            get_xrds(?GVD("content-type", Headers, none), Body);
         Other ->
-            ?DBG({error, Other})
-    end,
-    ok.
-    
+            {error, {http_error, {step_two, YadisURL, Other}}}
+    end.
+
+
+
 get_descriptor_url(Headers, Body) when is_list(Headers) ->
     case ?GVD("x-xrds-location", Headers, none) of
         none -> 
@@ -69,9 +94,11 @@ get_meta_content([Char|Rest], Bits) -> get_meta_content(Rest, [Char|Bits]).
 
 
 test() ->
-    retrieve("https://www.google.com/accounts/o8/id"), % Direct XRDS response
-    retrieve("https://api.screenname.aol.com/auth/openidServer"), % x-xrds-location header
-    retrieve("http://exbrend.livejournal.com"). % x-xrds-location meta tag
+    ?DBG(retrieve("https://www.google.com/accounts/o8/id")), % Direct XRDS response
+    ?DBG(retrieve("https://api.screenname.aol.com/auth/openidServer")), % x-xrds-location header
+    ?DBG(retrieve("http://exbrend.livejournal.com")), % x-xrds-location meta tag
+
+    application:stop(inets). % Avoid error spam from held-open connections
     
 
 %% brendonh@dev:~/projects/erl_openid$ make test
