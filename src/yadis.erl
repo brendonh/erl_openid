@@ -33,7 +33,9 @@ retrieve(YadisURL) ->
     application:start(inets),
     application:start(ssl),
 
-    case http:request(get, {YadisURL, [{"accept", "application/xrds+xml"}]}, [], []) of
+    NormalizedURL = normalize(YadisURL),
+
+    case http:request(get, {NormalizedURL, [{"accept", "application/xrds+xml"}]}, [], []) of
         {ok, {_Status, Headers, Body}} ->
             DescriptorURL = get_descriptor_url(Headers, Body),
             handle_response(DescriptorURL, Headers, Body);
@@ -161,7 +163,7 @@ test() ->
     ?P({"Google:", retrieve("https://www.google.com/accounts/o8/id")}),         % Direct XRDS response
     ?P({"AOL:", retrieve("https://api.screenname.aol.com/auth/openidServer")}), % x-xrds-location header
     ?P({"LiveJournal:", retrieve("http://exbrend.livejournal.com")}),           % x-xrds-location meta tag
-    ?P({"XRI Drummond:", retrieve(normalize("=drummond"))}),
+    ?P({"XRI Drummond:", retrieve("=drummond")}),
 
     application:stop(inets). % Avoid error spam from held-open connections
 
