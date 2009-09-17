@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 -module(yadis).
 
--export([retrieve/1, test/0]).
+-export([normalize/1, retrieve/1, test/0]).
 
 -include_lib("xmerl/include/xmerl.hrl").
 
@@ -16,6 +16,18 @@
 %% ------------------------------------------------------------
 %% API
 %% ------------------------------------------------------------
+
+normalize("xri://" ++ Identifier) -> normalize(Identifier);
+normalize([$=|_]=Identifier) -> resolve(Identifier);
+normalize([$@|_]=Identifier) -> resolve(Identifier);
+normalize([$+|_]=Identifier) -> resolve(Identifier);
+normalize([$$|_]=Identifier) -> resolve(Identifier);
+normalize([$!|_]=Identifier) -> resolve(Identifier);
+normalize([$(|_]=Identifier) -> resolve(Identifier);
+normalize("http://" ++ Tail) -> strip_fragment("http://" ++ Tail);
+normalize("https://" ++ Tail) -> strip_fragment("https://" ++ Tail);
+normalize(PartialURL) -> strip_fragment("http://" ++ PartialURL).
+     
 
 retrieve(YadisURL) ->
     application:start(inets),
@@ -34,6 +46,15 @@ retrieve(YadisURL) ->
 %% Retrieval details
 %% ------------------------------------------------------------
 
+resolve(Identifier) -> "http://xri.net/" ++ Identifier.
+
+strip_fragment(URL) -> strip_fragment(URL, []).
+
+strip_fragment([$#|_], SoFar) -> lists:reverse(SoFar);
+strip_fragment([], SoFar) -> lists:reverse(SoFar);
+strip_fragment([H|T], SoFar) -> strip_fragment(T, [H|SoFar]).
+     
+
 
 handle_response(none, Headers, Body) ->
     get_xrds(?GVD("content-type", Headers, none), Body);
@@ -43,6 +64,7 @@ handle_response(URL, _Headers, _Body) ->
 
 get_xrds("application/xrds" ++ _Rest, Body) -> munge_xrds(Body);
 get_xrds("text/xml" ++ _Rest, Body) -> munge_xrds(Body); % Against the spec, but LiveJournal does it.
+get_xrds("content-type: application/xrds" ++ _Rest, Body) -> munge_xrds(Body); % Don't ask me, ask 1id.com
 get_xrds(Other, _Body) -> {error, {not_xrds, Other}}.
 
 
@@ -120,9 +142,8 @@ munge_service(Service) ->
                                || U <- xmerl_xpath:string("URI", Service)])],
     {Priority, Types, URIs}.
 
-get_text(Element) ->
-    [Value] = Element#xmlElement.content,
-    Value#xmlText.value.
+get_text(#xmlElement{content=[]}) -> "";
+get_text(#xmlElement{content=[Value|Rest]}) -> Value#xmlText.value.
 
 get_priority([#xmlAttribute{name=priority, value=Value}|_]) -> list_to_integer(Value);
 get_priority([_|Rest]) -> get_priority(Rest);
@@ -136,15 +157,18 @@ get_priority([]) -> none.
 -define(P(S), io:format("~p~n", [S])).
 
 test() ->
+
     ?P({"Google:", retrieve("https://www.google.com/accounts/o8/id")}),         % Direct XRDS response
     ?P({"AOL:", retrieve("https://api.screenname.aol.com/auth/openidServer")}), % x-xrds-location header
     ?P({"LiveJournal:", retrieve("http://exbrend.livejournal.com")}),           % x-xrds-location meta tag
+    ?P({"XRI Drummond:", retrieve(normalize("=drummond"))}),
 
     application:stop(inets). % Avoid error spam from held-open connections
 
 
 %% $ make test
 %% erlc -o ebin -Wall -v +debug_info src/yadis.erl
+%% src/yadis.erl:146: Warning: variable 'Rest' is unused
 %% erl +W w -pa ebin -noshell -s yadis test -s init stop
 %% {"Google:",
 %%  [{["http://specs.openid.net/auth/2.0/server","http://openid.net/srv/ax/1.0",
@@ -158,3 +182,11 @@ test() ->
 %% {"LiveJournal:",
 %%  [{["http://openid.net/signon/1.0"],
 %%    ["http://www.livejournal.com/openid/server.bml"]}]}
+%% {"XRI Drummond:",
+%%  [{[],["skype:drummondreed?chat"]},
+%%   {[],["skype:drummondreed?call"]},
+%%   {["xri://+i-service*(+forwarding)*($v*1.0)",[]],["http://1id.com/"]},
+%%   {["http://openid.net/signon/1.0"],
+%%    ["http://1id.com/sso/","https://1id.com/sso/"]},
+%%   {["xri://+i-service*(+contact)*($v*1.0)",[]],["http://1id.com/contact/"]}]}
+
