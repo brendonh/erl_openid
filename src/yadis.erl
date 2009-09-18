@@ -13,6 +13,13 @@
 
 -define(GVD(E, P, D), proplists:get_value(E, P, D)).
 
+-define(HTTP_HEADERS, [{"Accept", "application/xrds+xml"},
+                       {"Connection", "close"},
+                       {"User-Agent", "Erlang/openid"}]).
+
+-define(HTTP_OPTIONS, [{relaxed, true}]).
+-define(REQ_OPTIONS, []).
+
 %% ------------------------------------------------------------
 %% API
 %% ------------------------------------------------------------
@@ -35,7 +42,7 @@ retrieve(YadisURL) ->
 
     NormalizedURL = normalize(YadisURL),
 
-    case http:request(get, {NormalizedURL, [{"accept", "application/xrds+xml"}]}, [], []) of
+    case http:request(get, {NormalizedURL, ?HTTP_HEADERS}, ?HTTP_OPTIONS, ?REQ_OPTIONS) of
         {ok, {_Status, Headers, Body}} ->
             DescriptorURL = get_descriptor_url(Headers, Body),
             handle_response(DescriptorURL, Headers, Body);
@@ -48,7 +55,7 @@ retrieve(YadisURL) ->
 %% Retrieval details
 %% ------------------------------------------------------------
 
-resolve(Identifier) -> "http://xri.net/" ++ Identifier.
+resolve(Identifier) -> "http://xri.net/" ++ Identifier ++ "?_xrd_r=application/xrds+xml".
 
 strip_fragment(URL) -> strip_fragment(URL, []).
 
@@ -66,7 +73,6 @@ handle_response(URL, _Headers, _Body) ->
 
 get_xrds("application/xrds" ++ _Rest, Body) -> munge_xrds(Body);
 get_xrds("text/xml" ++ _Rest, Body) -> munge_xrds(Body); % Against the spec, but LiveJournal does it.
-get_xrds("content-type: application/xrds" ++ _Rest, Body) -> munge_xrds(Body); % Don't ask me, ask 1id.com
 get_xrds(Other, _Body) -> {error, {not_xrds, Other}}.
 
 
@@ -75,9 +81,7 @@ try_descriptor_url(URL) -> retrieve_step_two(URL).
 
 
 retrieve_step_two(YadisURL) ->
-    case http:request(get, {YadisURL, [{"accept", "application/xrds+xml"},
-                                       {"connection", "Close"}]},
-                      [], []) of
+    case http:request(get, {YadisURL, ?HTTP_HEADERS}, ?HTTP_OPTIONS, ?REQ_OPTIONS) of
         {ok, {_Status, Headers, Body}} ->
             get_xrds(?GVD("content-type", Headers, none), Body);
         Other ->
@@ -145,7 +149,7 @@ munge_service(Service) ->
     {Priority, Types, URIs}.
 
 get_text(#xmlElement{content=[]}) -> "";
-get_text(#xmlElement{content=[Value|Rest]}) -> Value#xmlText.value.
+get_text(#xmlElement{content=[Value|_]}) -> Value#xmlText.value.
 
 get_priority([#xmlAttribute{name=priority, value=Value}|_]) -> list_to_integer(Value);
 get_priority([_|Rest]) -> get_priority(Rest);
@@ -163,7 +167,7 @@ test() ->
     ?P({"Google:", retrieve("https://www.google.com/accounts/o8/id")}),         % Direct XRDS response
     ?P({"AOL:", retrieve("https://api.screenname.aol.com/auth/openidServer")}), % x-xrds-location header
     ?P({"LiveJournal:", retrieve("http://exbrend.livejournal.com")}),           % x-xrds-location meta tag
-    ?P({"XRI Drummond:", retrieve("=drummond")}),
+    ?P({"XRI Brend:", retrieve("=brendonh")}),                                  % Direct XRDS via xri.net
 
     application:stop(inets). % Avoid error spam from held-open connections
 
