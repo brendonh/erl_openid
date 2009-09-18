@@ -19,43 +19,52 @@
 discover(Identifier) ->
     case yadis:retrieve(Identifier) of
         {none, Body} -> html_discovery(Body);
-        XRDS -> extract_identifier(XRDS)
+        XRDS -> extract_authreq(XRDS)
     end.
     
         
-extract_identifier(XRDS) ->
-    case extract_op_id(XRDS) of
-        none -> extract_claimed_id(XRDS);
-        OpID -> OpID
+extract_authreq(XRDS) ->
+    case authreq_by_opid(XRDS) of
+        none -> authreq_by_claimed_id(XRDS);
+        Req -> Req
     end.
 
-extract_op_id(XRDS) -> 
-    case find_service_type(XRDS#xrds.services, "http://specs.openid.net/auth/2.0/server") of
+authreq_by_opid(XRDS) -> 
+    case find_service(XRDS#xrds.services, "http://specs.openid.net/auth/2.0/server") of
         none -> none;
-        URL -> #authReq{opURL=URL, version={2,0}}
-    end.
-            
-extract_claimed_id(XRDS) -> 
-    extract_claimed_id(XRDS, [{"http://specs.openid.net/auth/2.0/signon", {2,0}},
-                              {"http://openid.net/signon/1.1", {1,1}},
-                              {"http://openid.net/signon/1.0", {1,0}}]).
-
-extract_claimed_id(_, []) ->
-    none;
-extract_claimed_id(XRDS, [{Type,Version}|Rest]) ->
-    case find_service_type(XRDS#xrds.services, Type) of
-        none -> extract_claimed_id(XRDS, Rest);
-        URL -> #authReq{opURL=URL, version=Version}
+        Service -> build_authReq(XRDS, Service, {2,0})
     end.
             
     
-find_service_type([], _) -> none;
-find_service_type([{Types, []}|Rest], Type) -> find_service_type(Rest, Type);
-find_service_type([{Types, [URL|_]}|Rest], Type) ->
+find_service([], _) -> none;
+find_service([#xrdService{uris=[]}|Rest], Type) -> find_service(Rest, Type);
+find_service([#xrdService{types=Types}=Service|Rest], Type) ->
     case lists:any(fun(X) -> X == Type end, Types) of
-        true -> URL;
-        false -> find_service_type(Rest, Type)
+        true -> Service;
+        false -> find_service(Rest, Type)
     end.
+
+
+authreq_by_claimed_id(XRDS) -> 
+    authreq_by_claimed_id(XRDS, [{"http://specs.openid.net/auth/2.0/signon", {2,0}},
+                                 {"http://openid.net/signon/1.1", {1,1}},
+                                 {"http://openid.net/signon/1.0", {1,0}}]).
+
+authreq_by_claimed_id(_, []) ->
+    none;
+authreq_by_claimed_id(XRDS, [{Type,Version}|Rest]) ->
+    case find_service(XRDS#xrds.services, Type) of
+        none -> authreq_by_claimed_id(XRDS, Rest);
+        Service -> build_authReq(XRDS, Service, Version)
+    end.
+
+
+build_authReq(XRDS, Service, Version) ->
+    [URL|_] = Service#xrdService.uris,
+    #authReq{opURL=URL, version={2,0}, 
+             claimedID=XRDS#xrds.claimedID,
+             localID=Service#xrdService.localID}.
+
 
 html_discovery(Body) ->
     html_discovery(Body, [{"openid2.provider", "openid2.local_id", {2,0}},
@@ -88,11 +97,12 @@ html_local_id(Body, RelName) ->
 
 test() ->
 
+    ?DBG({"Someone:", discover("blog.paulbonser.com")}),
     ?DBG({"Google:", discover("https://www.google.com/accounts/o8/id")}),
     ?DBG({"AOL:", discover("http://openid.aol.com/brend")}), 
     ?DBG({"Flickr:", discover("http://flickr.com/exbrend")}),
     ?DBG({"Myspace:", discover("www.myspace.com")}),
     ?DBG({"LiveJournal:", discover("http://exbrend.livejournal.com")}),  
-    ?DBG({"XRI Brend:", discover("=brendonh")}),                         
+    ?DBG({"XRI Brend:", discover("=brendonh")}),
 
     application:stop(inets). % Avoid error spam from held-open connections

@@ -6,6 +6,12 @@
 %%% Created : 18 Sep 2009 by Brendon Hogger <brendonh@dev.brendonh.org>
 %%%-------------------------------------------------------------------
 
+-record(xrdService, {
+  types,
+  uris,
+  localID
+}).
+
 -record(xrds, {
   origID, 
   claimedID, 
@@ -17,6 +23,6 @@
 -record(authReq, {
    opURL,
    version,
-   claimedID,
-   localID
+   claimedID=none,
+   localID=none
 }).

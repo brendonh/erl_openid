@@ -137,19 +137,20 @@ get_descriptor_url(Body) ->
 munge_xrds(String) ->
     {Doc, _} = xmerl_scan:string(String),
     CanonicalID = get_canonical_id(Doc),
-    Services = [{Ts, Us} || {_P, Ts, Us} <- lists:sort(
-      fun({P1,_,_},{P2,_,_}) -> P1 < P2 end,
+    Services = [S || {_P, S} <- lists:sort(
+      fun({P1,_},{P2,_}) -> P1 < P2 end,
       [munge_service(S) || S <- xmerl_xpath:string("XRD/Service", Doc)])],
     #xrds{canonicalID=CanonicalID, services=Services}.
 
 munge_service(Service) ->
     Priority = get_priority(Service#xmlElement.attributes),
     Types = [get_text(T) || T <- xmerl_xpath:string("Type", Service)],
+    LocalID = get_local_id(Service),
     URIs = [U || {_P, U} <- lists:sort(
                               fun({P1,_},{P2,_}) -> P1 < P2 end,
                               [{get_priority(U#xmlElement.attributes), get_text(U)}
                                || U <- xmerl_xpath:string("URI", Service)])],
-    {Priority, Types, URIs}.
+    {Priority, #xrdService{types=Types, uris=URIs, localID=LocalID}}.
 
 get_text(#xmlElement{content=[]}) -> "";
 get_text(#xmlElement{content=[Value|_]}) -> Value#xmlText.value.
@@ -163,7 +164,19 @@ get_canonical_id(Doc) ->
         [] -> none;
         [#xmlElement{content=[Value|_]}|_] -> Value#xmlText.value
     end.
-             
+        
+
+get_local_id(Service) ->     
+    get_local_id(Service, ["LocalID", "Delegate"]).
+
+get_local_id(_, []) ->
+    none;
+get_local_id(Service, [Tag|Rest]) ->
+    case xmerl_xpath:string(Tag, Service) of
+        [] -> get_local_id(Service, Rest);
+        [#xmlElement{content=[Value|_]}|_] -> Value#xmlText.value
+    end.
+            
 
 %% ------------------------------------------------------------
 %% Tests
