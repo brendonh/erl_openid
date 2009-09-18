@@ -101,32 +101,39 @@ get_descriptor_url(Headers, Body) when is_list(Headers) ->
         URL -> URL
     end.
 
-
-get_descriptor_url("<meta" ++ Rest) -> get_meta(Rest);
-get_descriptor_url("</head>" ++ _Rest) -> none;
-get_descriptor_url("") -> none;
-get_descriptor_url([_|Rest]) ->
-    get_descriptor_url(Rest).
-
-
-get_meta(Rest) ->
-    Content = get_meta_content(Rest, []),
-    case re:run(string:to_lower(Content),
-                "([a-z0-9-]+)\s*=\s*[\"'](.*?)[\"']", % "
-                [{capture, all_but_first, list}, global]) of
-        {match, Bits} -> check_meta([{K,V} || [K,V] <- Bits], Rest);
-        _ -> get_descriptor_url(Rest)
+get_descriptor_url(Body) ->
+    case openid_utils:get_tags(Body, "meta", "http-equiv", "x-xrds-location") of
+        [] -> none;
+        [Tag|_] -> ?GVD("content", Tag, none)
     end.
+        
+            
 
-check_meta(PropList, Rest) ->
-    case ?GVD("http-equiv", PropList, none) of
-        "x-xrds-location" -> ?GVD("content", PropList, none);
-        _ -> get_descriptor_url(Rest)
-    end.
+%% get_descriptor_url("<meta" ++ Rest) -> get_meta(Rest);
+%% get_descriptor_url("</head>" ++ _Rest) -> none;
+%% get_descriptor_url("") -> none;
+%% get_descriptor_url([_|Rest]) ->
+%%     get_descriptor_url(Rest).
 
 
-get_meta_content(">" ++ _Rest, Content) -> lists:reverse(Content);
-get_meta_content([Char|Rest], Bits) -> get_meta_content(Rest, [Char|Bits]).
+%% get_meta(Rest) ->
+%%     Content = get_meta_content(Rest, []),
+%%     case re:run(string:to_lower(Content),
+%%                 "([a-z0-9-]+)\s*=\s*[\"'](.*?)[\"']", % "
+%%                 [{capture, all_but_first, list}, global]) of
+%%         {match, Bits} -> check_meta([{K,V} || [K,V] <- Bits], Rest);
+%%         _ -> get_descriptor_url(Rest)
+%%     end.
+
+%% check_meta(PropList, Rest) ->
+%%     case ?GVD("http-equiv", PropList, none) of
+%%         "x-xrds-location" -> ?GVD("content", PropList, none);
+%%         _ -> get_descriptor_url(Rest)
+%%     end.
+
+
+%% get_meta_content(">" ++ _Rest, Content) -> lists:reverse(Content);
+%% get_meta_content([Char|Rest], Bits) -> get_meta_content(Rest, [Char|Bits]).
 
 
 %% ------------------------------------------------------------
