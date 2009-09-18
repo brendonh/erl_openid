@@ -20,7 +20,7 @@ all: $(TARGETS)
 run_prereqs: all
 
 test: run_prereqs
-	$(ERL_CMD) -noshell -s openid test -s init stop
+	$(ERL_CMD) -noshell -pa ../mochiweb/ebin -s openid test -s init stop
 
 clean: cleanlog
 	rm -f $(TARGETS)
