@@ -29,9 +29,15 @@ extract_authreq(XRDS) ->
         Req -> Req
     end.
 
-authreq_by_opid(XRDS) -> 
-    case find_service(XRDS#xrds.services, "http://specs.openid.net/auth/2.0/server") of
-        none -> none;
+authreq_by_opid(XRDS) ->
+    authreq_by_opid(XRDS, ["http://specs.openid.net/auth/2.0/server",
+                           "http://openid.net/server/1.1",
+                           "http://openid.net/server/1.0"]).
+
+authreq_by_opid(_, []) -> none;
+authreq_by_opid(XRDS, [Type|Rest]) -> 
+    case find_service(XRDS#xrds.services, Type) of
+        none -> authreq_by_opid(XRDS, Rest);
         Service -> build_authReq(XRDS, Service, {2,0})
     end.
             
@@ -61,7 +67,7 @@ authreq_by_claimed_id(XRDS, [{Type,Version}|Rest]) ->
 
 build_authReq(XRDS, Service, Version) ->
     [URL|_] = Service#xrdService.uris,
-    #authReq{opURL=URL, version={2,0}, 
+    #authReq{opURL=URL, version=Version, 
              claimedID=XRDS#xrds.claimedID,
              localID=Service#xrdService.localID}.
 
