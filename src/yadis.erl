@@ -95,7 +95,7 @@ handle_response(URL, _Headers, _Body) ->
 
 get_xrds("application/xrds" ++ _Rest, Body) -> munge_xrds(Body);
 get_xrds("text/xml" ++ _Rest, Body) -> munge_xrds(Body); % Against the spec, but LiveJournal does it.
-get_xrds(Other, _Body) -> none.
+get_xrds(_Other, _Body) -> none.
 
 
 try_descriptor_url(none) -> {error, no_descriptor_url};

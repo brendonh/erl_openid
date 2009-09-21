@@ -1,13 +1,13 @@
 %%%-------------------------------------------------------------------
 %%% File    : openid.erl
 %%% Author  : Brendon Hogger <brendonh@dev.brendonh.org>
-%%% Description : 
+%%% Description :
 %%%
 %%% Created : 18 Sep 2009 by Brendon Hogger <brendonh@dev.brendonh.org>
 %%%-------------------------------------------------------------------
 -module(openid).
 
--export([discover/1, associate/1, test/0]).
+-export([discover/1, associate/1, authentication_url/3, test/0]).
 
 -include("openid.hrl").
 
@@ -22,12 +22,20 @@
 %% ------------------------------------------------------------
 
 discover(Identifier) ->
-    case yadis:retrieve(Identifier) of
-        {none, Body} -> html_discovery(Body);
-        XRDS -> extract_authreq(XRDS)
+    Req = case yadis:retrieve(Identifier) of
+              {none, Body} -> html_discovery(Body);
+              #xrds{}=XRDS -> extract_authreq(XRDS);
+              {error, Error} ->
+                  %?DBG({error, Error}),
+                  none
+          end,
+
+    case Req of
+        #authReq{} -> set_identity_params(Req);
+        _ -> Req
     end.
-    
-        
+
+
 extract_authreq(XRDS) ->
     case authreq_by_opid(XRDS) of
         none -> authreq_by_claimed_id(XRDS);
@@ -40,13 +48,13 @@ authreq_by_opid(XRDS) ->
                            "http://openid.net/server/1.0"]).
 
 authreq_by_opid(_, []) -> none;
-authreq_by_opid(XRDS, [Type|Rest]) -> 
+authreq_by_opid(XRDS, [Type|Rest]) ->
     case find_service(XRDS#xrds.services, Type) of
         none -> authreq_by_opid(XRDS, Rest);
         Service -> build_authReq(XRDS, Service, {2,0})
     end.
-            
-    
+
+
 find_service([], _) -> none;
 find_service([#xrdService{uris=[]}|Rest], Type) -> find_service(Rest, Type);
 find_service([#xrdService{types=Types}=Service|Rest], Type) ->
@@ -56,7 +64,7 @@ find_service([#xrdService{types=Types}=Service|Rest], Type) ->
     end.
 
 
-authreq_by_claimed_id(XRDS) -> 
+authreq_by_claimed_id(XRDS) ->
     authreq_by_claimed_id(XRDS, [{"http://specs.openid.net/auth/2.0/signon", {2,0}},
                                  {"http://openid.net/signon/1.1", {1,1}},
                                  {"http://openid.net/signon/1.0", {1,0}}]).
@@ -71,8 +79,8 @@ authreq_by_claimed_id(XRDS, [{Type,Version}|Rest]) ->
 
 
 build_authReq(XRDS, Service, Version) ->
-    [URL|_] = Service#xrdService.uris,
-    #authReq{opURL=URL, version=Version, 
+    #authReq{opURLs=Service#xrdService.uris, 
+             version=Version,
              claimedID=XRDS#xrds.claimedID,
              localID=Service#xrdService.localID}.
 
@@ -90,17 +98,30 @@ html_discovery(Body, [{ProviderRel, LocalIDRel, Version}|Rest]) ->
                 none -> html_discovery(Body, Rest);
                 URL ->
                     LocalID = html_local_id(Body, LocalIDRel),
-                    #authReq{opURL=URL, version=Version, localID=LocalID}
+                    #authReq{opURLs=[URL], version=Version, localID=LocalID}
             end;
         _ -> html_discovery(Body, Rest)
     end.
-    
+
 html_local_id(Body, RelName) ->
     case openid_utils:get_tags(Body, "link", "rel", RelName) of
         [Tag|_] -> ?GVD("href", Tag, none);
         _ -> none
     end.
 
+
+set_identity_params(AuthReq) ->
+    {Claimed, Local} = get_identity_params(AuthReq#authReq.claimedID,
+                                           AuthReq#authReq.localID),
+    AuthReq#authReq{claimedID=Claimed, localID=Local}.
+
+get_identity_params(none, _) ->
+    {"http://specs.openid.net/auth/2.0/identifier_select",
+     "http://specs.openid.net/auth/2.0/identifier_select"};
+get_identity_params(ClaimedID, none) ->
+    {ClaimedID, ClaimedID};
+get_identity_params(ClaimedID, LocalID) ->
+    {ClaimedID, LocalID}.
 
 %% ------------------------------------------------------------
 %% Association
@@ -112,49 +133,68 @@ html_local_id(Body, RelName) ->
 
 -define(CONTENT_TYPE, "application/x-www-form-urlencoded; charset=UTF-8").
 
-associate(AuthReq) ->
+associate(OpURL) ->
     application:start(crypto),
 
     MP = crypto:mpint(?P),
     MG = crypto:mpint(?G),
 
-    XA = crypto:rand_uniform(crypto:mpint(1), MP),
-    Public = crypto:erlint(crypto:mod_exp(MG, XA, MP)),
+    {Public, Private} = crypto:dh_generate_key([MP,MG]),
+
+    %?DBG({pub_priv, Public, Private, size(Public), size(Private)}),
+    
+    RollPub = roll(Public),
+    %?DBG({rolled, RollPub, size(RollPub)}),
 
     Params = [{"openid.ns", "http://specs.openid.net/auth/2.0"},
               {"openid.mode", "associate"},
               {"openid.assoc_type", "HMAC-SHA1"},
               {"openid.session_type", "DH-SHA1"},
-              {"openid.dh_modulus", base64:encode(roll(?P))},
-              {"openid.dh_gen", base64:encode(roll(?G))},
+              {"openid.dh_modulus", base64:encode(roll(MP))},
+              {"openid.dh_gen", base64:encode(roll(MG))},
               {"openid.dh_consumer_public", base64:encode(roll(Public))}],
-    
+
     ReqBody = mochiweb_util:urlencode(Params),
-    
-    Request = {AuthReq#authReq.opURL, 
-               [], ?CONTENT_TYPE, ReqBody},
-    
+
+    Request = {OpURL, [], ?CONTENT_TYPE, ReqBody},
+
     {ok, {_,_,Body}} = http:request(post, Request, [], []),
-    
+
     Response = parse_keyvalue(Body),
 
-    ExpiresIn = ?GV("expires_in", Response),
-    ServPublic = ?GV("dh_server_public", Response),
-    MAC = ?GV("enc_mac_key", Response),
+    Handle = ?GV("assoc_handle", Response),
+    ExpiresIn = list_to_integer(?GV("expires_in", Response)),
     
-    {ExpiresIn, ServPublic, MAC}.                 
+    ServPublic = unroll(base64:decode(?GV("dh_server_public", Response))),
 
+    %?DBG({serv_pub, ServPublic}),
 
+    EncMAC = base64:decode(?GV("enc_mac_key", Response)),
 
-%%% btwoc() in Spec
-roll(N) when is_integer(N) ->
-    <<_Size:32, Bin/binary>> = crypto:mpint(N),
-    Bin.
+    ZZ = btwoc(crypto:dh_compute_key(ServPublic, Private, [MP,MG])),
+
+    %?DBG({zz, ZZ}),
+
+    MAC = crypto:exor(crypto:sha(ZZ), EncMAC),
+
+    #assoc{handle=Handle, 
+           created=now(), 
+           expiresIn=ExpiresIn, 
+           servPublic=ServPublic,
+           mac=MAC}.
+
  
-%%% The inverse to btwoc()
+roll(N) when is_binary(N) ->
+    <<_Size:32, Bin/binary>> = N,
+    btwoc(Bin).
+
+btwoc(<<X, _/binary>>=Bin) when X < 128 -> Bin;
+btwoc(Bin) -> list_to_binary([<<0>>, Bin]).
+
+
 unroll(Bin) when is_binary(Bin) ->
     Size = size(Bin),
-    crypto:erlint(<<Size:32, Bin/binary>>).
+    <<Size:32, Bin/binary>>.
 
 
 parse_keyvalue(Body) ->
@@ -164,29 +204,63 @@ parse_keyvalue(Body) ->
 
 split_kv([$:|Rest], Buff) -> {lists:reverse(Buff), Rest};
 split_kv([C|Rest], Buff) -> split_kv(Rest, [C|Buff]).
+
+
+%% ------------------------------------------------------------
+%% Authentication
+%% ------------------------------------------------------------
+
+authentication_url(AuthReq, ReturnTo, Realm) ->
     
+    Assoc = AuthReq#authReq.assoc,
+    
+    IDBits = case AuthReq#authReq.claimedID of
+                 none -> [];
+                 _ -> [{"openid.claimed_id", AuthReq#authReq.claimedID},
+                       {"openid.identity", AuthReq#authReq.localID}]
+             end,
+
+    Params = [{"openid.ns", "http://specs.openid.net/auth/2.0"},
+              {"openid.mode", "checkid_setup"},
+              {"openid.assoc_handle", Assoc#assoc.handle},
+              {"openid.return_to", ReturnTo},
+              {"openid.realm", Realm}] ++ IDBits,
+    
+    QueryString = mochiweb_util:urlencode(Params),
+
+    [URL|_] = AuthReq#authReq.opURLs,
+
+    list_to_binary([URL, "?", QueryString]).
+
 %% ------------------------------------------------------------
 %% Tests
 %% ------------------------------------------------------------
 
 test() ->
 
+    application:start(inets),
+    application:start(ssl),
+
     Test = fun(ID) ->
                    ?DBG({identifier, ID}),
                    Req = discover(ID),
-                   ?DBG({request, Req}),
-                   ?DBG({assoc, associate(Req)})
+                   %?DBG({request, Req}),
+                   [URL,_] = Req#authReq.opURLs,
+                   Assoc = associate(URL),
+                   ?DBG({assoc, Assoc}),
+                   %?DBG({auth, authenticate(Req2, "http://dev.brendonh.org/return", "http://dev.brendonh.org/")}),
+                   ok
            end,
 
     % 2.0
     Test("https://www.google.com/accounts/o8/id"),
-    Test("http://flickr.com/exbrend"),
-    Test("=brendonh"),
+    %Test("http://flickr.com/exbrend"),
+    %Test("=brendonh"),
 
     % 1.0 / 1.1
-    %?DBG({"AOL:", discover("http://openid.aol.com/brend")}), 
+    %?DBG({"AOL:", discover("http://openid.aol.com/brend")}),
     %?DBG({"Myspace:", discover("www.myspace.com")}),
-    %?DBG({"LiveJournal:", discover("http://exbrend.livejournal.com")}),  
+    %?DBG({"LiveJournal:", discover("http://exbrend.livejournal.com")}),
     %?DBG({"PaulBonser:", discover("blog.paulbonser.com")}),
 
     application:stop(inets). % Avoid error spam from held-open connections

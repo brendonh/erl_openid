@@ -21,8 +21,17 @@
 }).
 
 -record(authReq, {
-   opURL,
+   opURLs,
    version,
    claimedID=none,
-   localID=none
+   localID=none,
+   assoc=none
+}).
+
+-record(assoc, {
+  handle,
+  created,
+  expiresIn,
+  servPublic,
+  mac
 }).
