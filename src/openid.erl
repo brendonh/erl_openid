@@ -154,7 +154,7 @@ associate(OpURL) ->
 
     Request = {OpURL, [], ?CONTENT_TYPE, ReqBody},
 
-    {ok, {_,_,Body}} = http:request(post, Request, [], []),
+    {ok, {_,_,Body}} = httpc:request(post, Request, [], []),
 
     Response = parse_keyvalue(Body),
 
