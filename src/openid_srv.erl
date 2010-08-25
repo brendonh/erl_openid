@@ -43,10 +43,6 @@ start_link(Name) ->
 %% gen_server callbacks
 %%====================================================================
 
--define(GV(E, P), proplists:get_value(E, P)).
--define(GVD(E, P, D), proplists:get_value(E, P, D)).
--define(DBG(Term), io:format("~p: ~p~n", [self(), Term])).
-
 init(_Args) ->
     AuthReqs = ets:new(openid_authreqs, [set, private]),
     Assocs = ets:new(openid_assocs, [set, private]),
@@ -248,9 +244,9 @@ verify_signature(ClaimedID, Assoc, Fields) ->
     Invalidate = ?GVD("openid.invalidate_handle", Fields, false),
     verify_signature(ClaimedID, Invalidate, Assoc, Fields).
 
-verify_signature(_, _, none, Fields) ->
+verify_signature(_, _, none, _Fields) ->
     {error, "Direct verification not implemented yet"};
-verify_signature(ClaimedID, false, #assoc{}=Assoc, Fields) ->
+verify_signature(_ClaimedID, false, #assoc{}=Assoc, Fields) ->
     KV = lists:flatten([[Key,$:,?GV("openid." ++ Key, Fields),$\n]
                         || Key <- string:tokens(?GV("openid.signed", Fields), ",")]),
     MAC = Assoc#assoc.mac,

@@ -11,10 +11,6 @@
 
 -include("openid.hrl").
 
--define(GV(E, P), proplists:get_value(E, P)).
--define(GVD(E, P, D), proplists:get_value(E, P, D)).
--define(DBG(Term), io:format("~p: ~p~n", [self(), Term])).
-
 
 
 %% ------------------------------------------------------------
@@ -25,7 +21,7 @@ discover(Identifier) ->
     Req = case yadis:retrieve(Identifier) of
               {none, Body} -> html_discovery(Body);
               #xrds{}=XRDS -> extract_authreq(XRDS);
-              {error, Error} ->
+              {error, _Error} ->
                   %?DBG({error, Error}),
                   none
           end,
@@ -143,7 +139,7 @@ associate(OpURL) ->
 
     %?DBG({pub_priv, Public, Private, size(Public), size(Private)}),
     
-    RollPub = roll(Public),
+    _RollPub = roll(Public),
     %?DBG({rolled, RollPub, size(RollPub)}),
 
     Params = [{"openid.ns", "http://specs.openid.net/auth/2.0"},

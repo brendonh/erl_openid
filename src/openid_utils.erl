@@ -11,10 +11,6 @@
 
 -include("openid.hrl").
 
--define(GV(E, P), proplists:get_value(E, P)).
--define(GVD(E, P, D), proplists:get_value(E, P, D)).
--define(DBG(Term), io:format("~p: ~p~n", [self(), Term])).
-
 get_tags(Content, Tag) ->
     find_tags(Content, {[], Tag, none, none}).
 
