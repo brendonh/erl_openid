@@ -1,34 +1,27 @@
-SRC_DIR = src
-EBIN_DIR = ebin
-INCLUDE_DIR = include
+ERL ?= erl
+APP := openid
 
-SOURCES  = $(wildcard $(SRC_DIR)/*.erl)
-INCLUDES = $(wildcard $(INCLUDE_DIR)/*.hrl)
-TARGETS  = $(patsubst $(SRC_DIR)/%.erl, $(EBIN_DIR)/%.beam,$(SOURCES))
+.PHONY: deps
+.PHONY: test
+.PHONY: mod
 
-ERL_EBINS = -pa $(EBIN_DIR)
+all: deps
+	@./rebar compile
 
-ERLC = erlc
-ERLC_OPTS = -o $(EBIN_DIR) -Wall -v +debug_info
+deps:
+	@./rebar get-deps
 
-ERL_CMD=erl \
-	+W w \
-	$(ERL_EBINS)
+clean:
+	@./rebar clean
 
-all: $(TARGETS)
+mod:
+	@./rebar create-mod app=$(APP) modid=$(MOD)
 
-run_prereqs: all
+test:
+	@./rebar eunit app=$(APP)
 
-test: run_prereqs
-	$(ERL_CMD) -noshell -pa ../mochiweb/ebin -s openid_srv test -s init stop
+distclean: clean
+	@./rebar delete-deps
 
-clean: cleanlog
-	rm -f $(TARGETS)
-	rm -f $(EBIN_DIR)/*.beam
-
-cleanlog:
-	rm -f auth.log report.log sasl_err.log
-	rm -f *.access
-
-$(EBIN_DIR)/%.beam: $(SRC_DIR)/%.erl $(INCLUDES)
-	$(ERLC) $(ERLC_OPTS) $<
+docs:
+	@erl -noshell -run edoc_run application '$(APP)' '"."' '[]'
