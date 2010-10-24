@@ -39,6 +39,13 @@ skip_tag([$>|Rest], State) -> find_tags(Rest, State);
 skip_tag("", State) -> find_tags("", State);
 skip_tag([_|Rest], State) -> skip_tag(Rest, State).
 
+check_attrs(PropList, Tail, {Buffer,Tag,none,none}) ->
+    find_tags(Tail, {[PropList|Buffer],Tag,none,none});
+check_attrs(PropList, Tail, {_,_,Key,Val}=State) ->
+    case ?GVD(Key, PropList, none) of
+        none -> find_tags(Tail, State);
+        IVal -> check_val(string:to_lower(IVal), Val, PropList, Tail, State)
+    end.
 
 get_tag_content(Rest, State) ->
     {Content, Tail} = get_raw_content(Rest, []),
@@ -51,14 +58,6 @@ get_tag_content(Rest, State) ->
 
 get_raw_content(">" ++ Tail, Content) -> {lists:reverse(Content), Tail};
 get_raw_content([Char|Rest], Bits) -> get_raw_content(Rest, [Char|Bits]).
-
-check_attrs(PropList, Tail, {Buffer,Tag,none,none}) ->
-    find_tags(Tail, {[PropList|Buffer],Tag,none,none});
-check_attrs(PropList, Tail, {_,_,Key,Val}=State) ->
-    case ?GVD(Key, PropList, none) of
-        none -> find_tags(Tail, State);
-        IVal -> check_val(string:to_lower(IVal), Val, PropList, Tail, State)
-    end.
 
 check_val(V, V, PropList, Tail, {Buffer,Tag,Key,Val})->
     find_tags(Tail, {[PropList|Buffer],Tag,Key,Val});

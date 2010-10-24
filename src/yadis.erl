@@ -12,8 +12,6 @@
 -include("openid.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 
--define(GVD(E, P, D), proplists:get_value(E, P, D)).
-
 -define(HTTP_HEADERS, [{"Accept", "application/xrds+xml"},
                        {"Connection", "close"},
                        {"User-Agent", "Erlang/openid"}]).
@@ -48,7 +46,7 @@ retrieve(Identifier) ->
               false -> Normalized
           end,
     
-    case http:request(get, {URL, ?HTTP_HEADERS}, ?HTTP_OPTIONS, ?REQ_OPTIONS) of
+    case httpc:request(get, {URL, ?HTTP_HEADERS}, ?HTTP_OPTIONS, ?REQ_OPTIONS) of
         {ok, {_Status, Headers, Body}} ->
             DescriptorURL = get_descriptor_url(Headers, Body),
             XRDS = handle_response(DescriptorURL, Headers, Body),
@@ -103,7 +101,7 @@ try_descriptor_url(URL) -> retrieve_step_two(URL).
 
 
 retrieve_step_two(YadisURL) ->
-    case http:request(get, {YadisURL, ?HTTP_HEADERS}, ?HTTP_OPTIONS, ?REQ_OPTIONS) of
+    case httpc:request(get, {YadisURL, ?HTTP_HEADERS}, ?HTTP_OPTIONS, ?REQ_OPTIONS) of
         {ok, {_Status, Headers, Body}} ->
             get_xrds(?GVD("content-type", Headers, none), Body);
         Other ->
