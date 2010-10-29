@@ -53,7 +53,7 @@ retrieve(Identifier) ->
             case XRDS of 
                 none -> 
                     {none, Body};
-                #xrds{} -> 
+                #openid_xrds{} -> 
 
                     % XXX Todo -- Normalize DescriptorURL as claimedID 
                     % (2.0 spec #7.2.4)
@@ -62,9 +62,9 @@ retrieve(Identifier) ->
                                     true -> Normalized;
                                     false -> DescriptorURL
                                 end,
-                    XRDS#xrds{origID=Identifier, 
-                              isXRI=IsXRI,
-                              claimedID=ClaimedID}
+                    XRDS#openid_xrds{origID=Identifier, 
+				     isXRI=IsXRI,
+				     claimedID=ClaimedID}
             end;
         Other ->
             {error, {http_error, {Normalized, Other}}}
@@ -138,7 +138,7 @@ munge_xrds(String) ->
     Services = [S || {_P, S} <- lists:sort(
       fun({P1,_},{P2,_}) -> P1 < P2 end,
       [munge_service(S) || S <- xmerl_xpath:string("XRD/Service", Doc)])],
-    #xrds{canonicalID=CanonicalID, services=Services}.
+    #openid_xrds{canonicalID=CanonicalID, services=Services}.
 
 munge_service(Service) ->
     Priority = get_priority(Service#xmlElement.attributes),
@@ -148,7 +148,7 @@ munge_service(Service) ->
                               fun({P1,_},{P2,_}) -> P1 < P2 end,
                               [{get_priority(U#xmlElement.attributes), get_text(U)}
                                || U <- xmerl_xpath:string("URI", Service)])],
-    {Priority, #xrdService{types=Types, uris=URIs, localID=LocalID}}.
+    {Priority, #openid_xrdservice{types=Types, uris=URIs, localID=LocalID}}.
 
 get_text(#xmlElement{content=[]}) -> "";
 get_text(#xmlElement{content=[Value|_]}) -> Value#xmlText.value.

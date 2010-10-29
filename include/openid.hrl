@@ -10,13 +10,13 @@
 -define(GVD(E, P, D), proplists:get_value(E, P, D)).
 -define(DBG(Term), io:format("~p: ~p~n", [self(), Term])).
 
--record(xrdService, {
+-record(openid_xrdservice, {
   types,
   uris,
   localID
 }).
 
--record(xrds, {
+-record(openid_xrds, {
   origID, 
   claimedID, 
   canonicalID, 
@@ -24,7 +24,7 @@
   services
 }).
 
--record(authReq, {
+-record(openid_authreq, {
    opURLs,
    version,
    claimedID=none,
@@ -32,7 +32,7 @@
    assoc=none
 }).
 
--record(assoc, {
+-record(openid_assoc, {
   handle,
   created,
   expiresIn,

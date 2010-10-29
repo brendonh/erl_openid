@@ -20,14 +20,14 @@
 discover(Identifier) ->
     Req = case yadis:retrieve(Identifier) of
               {none, Body} -> html_discovery(Body);
-              #xrds{}=XRDS -> extract_authreq(XRDS);
+              #openid_xrds{}=XRDS -> extract_authreq(XRDS);
               {error, _Error} ->
                   %?DBG({error, Error}),
                   none
           end,
 
     case Req of
-        #authReq{} -> set_identity_params(Req);
+        #openid_authreq{} -> set_identity_params(Req);
         _ -> Req
     end.
 
@@ -45,15 +45,15 @@ authreq_by_opid(XRDS) ->
 
 authreq_by_opid(_, []) -> none;
 authreq_by_opid(XRDS, [Type|Rest]) ->
-    case find_service(XRDS#xrds.services, Type) of
+    case find_service(XRDS#openid_xrds.services, Type) of
         none -> authreq_by_opid(XRDS, Rest);
         Service -> build_authReq(XRDS, Service, {2,0})
     end.
 
 
 find_service([], _) -> none;
-find_service([#xrdService{uris=[]}|Rest], Type) -> find_service(Rest, Type);
-find_service([#xrdService{types=Types}=Service|Rest], Type) ->
+find_service([#openid_xrdservice{uris=[]}|Rest], Type) -> find_service(Rest, Type);
+find_service([#openid_xrdservice{types=Types}=Service|Rest], Type) ->
     case lists:any(fun(X) -> X == Type end, Types) of
         true -> Service;
         false -> find_service(Rest, Type)
@@ -68,17 +68,17 @@ authreq_by_claimed_id(XRDS) ->
 authreq_by_claimed_id(_, []) ->
     none;
 authreq_by_claimed_id(XRDS, [{Type,Version}|Rest]) ->
-    case find_service(XRDS#xrds.services, Type) of
+    case find_service(XRDS#openid_xrds.services, Type) of
         none -> authreq_by_claimed_id(XRDS, Rest);
         Service -> build_authReq(XRDS, Service, Version)
     end.
 
 
 build_authReq(XRDS, Service, Version) ->
-    #authReq{opURLs=Service#xrdService.uris, 
-             version=Version,
-             claimedID=XRDS#xrds.claimedID,
-             localID=Service#xrdService.localID}.
+    #openid_authreq{opURLs=Service#openid_xrdservice.uris, 
+		    version=Version,
+		    claimedID=XRDS#openid_xrds.claimedID,
+		    localID=Service#openid_xrdservice.localID}.
 
 
 html_discovery(Body) ->
@@ -94,7 +94,7 @@ html_discovery(Body, [{ProviderRel, LocalIDRel, Version}|Rest]) ->
                 none -> html_discovery(Body, Rest);
                 URL ->
                     LocalID = html_local_id(Body, LocalIDRel),
-                    #authReq{opURLs=[URL], version=Version, localID=LocalID}
+                    #openid_authreq{opURLs=[URL], version=Version, localID=LocalID}
             end;
         _ -> html_discovery(Body, Rest)
     end.
@@ -107,9 +107,9 @@ html_local_id(Body, RelName) ->
 
 
 set_identity_params(AuthReq) ->
-    {Claimed, Local} = get_identity_params(AuthReq#authReq.claimedID,
-                                           AuthReq#authReq.localID),
-    AuthReq#authReq{claimedID=Claimed, localID=Local}.
+    {Claimed, Local} = get_identity_params(AuthReq#openid_authreq.claimedID,
+                                           AuthReq#openid_authreq.localID),
+    AuthReq#openid_authreq{claimedID=Claimed, localID=Local}.
 
 get_identity_params(none, _) ->
     {"http://specs.openid.net/auth/2.0/identifier_select",
@@ -173,11 +173,11 @@ associate(OpURL) ->
 
     MAC = crypto:exor(crypto:sha(ZZ), EncMAC),
 
-    #assoc{handle=Handle, 
-           created=now(), 
-           expiresIn=ExpiresIn, 
-           servPublic=ServPublic,
-           mac=MAC}.
+    #openid_assoc{handle=Handle, 
+		  created=now(), 
+		  expiresIn=ExpiresIn, 
+		  servPublic=ServPublic,
+		  mac=MAC}.
 
  
 roll(N) when is_binary(N) ->
@@ -208,23 +208,23 @@ split_kv([C|Rest], Buff) -> split_kv(Rest, [C|Buff]).
 
 authentication_url(AuthReq, ReturnTo, Realm) ->
     
-    Assoc = AuthReq#authReq.assoc,
+    Assoc = AuthReq#openid_authreq.assoc,
     
-    IDBits = case AuthReq#authReq.claimedID of
+    IDBits = case AuthReq#openid_authreq.claimedID of
                  none -> [];
-                 _ -> [{"openid.claimed_id", AuthReq#authReq.claimedID},
-                       {"openid.identity", AuthReq#authReq.localID}]
+                 _ -> [{"openid.claimed_id", AuthReq#openid_authreq.claimedID},
+                       {"openid.identity", AuthReq#openid_authreq.localID}]
              end,
 
     Params = [{"openid.ns", "http://specs.openid.net/auth/2.0"},
               {"openid.mode", "checkid_setup"},
-              {"openid.assoc_handle", Assoc#assoc.handle},
+              {"openid.assoc_handle", Assoc#openid_assoc.handle},
               {"openid.return_to", ReturnTo},
               {"openid.realm", Realm}] ++ IDBits,
     
     QueryString = mochiweb_util:urlencode(Params),
 
-    [URL|_] = AuthReq#authReq.opURLs,
+    [URL|_] = AuthReq#openid_authreq.opURLs,
 
     list_to_binary([URL, "?", QueryString]).
 
@@ -241,7 +241,7 @@ test() ->
                    ?DBG({identifier, ID}),
                    Req = discover(ID),
                    %?DBG({request, Req}),
-                   [URL,_] = Req#authReq.opURLs,
+                   [URL,_] = Req#openid_authreq.opURLs,
                    Assoc = associate(URL),
                    ?DBG({assoc, Assoc}),
                    %?DBG({auth, authenticate(Req2, "http://dev.brendonh.org/return", "http://dev.brendonh.org/")}),

@@ -131,7 +131,7 @@ discover_authreq(Identifier, Cache, State) ->
 
 
 get_assoc(AuthReq, Cache, State) ->
-    [OpURL|_] = AuthReq#authReq.opURLs,
+    [OpURL|_] = AuthReq#openid_authreq.opURLs,
     %initiate_assoc(OpURL, Cache, State).
     case ets:lookup(State#state.assocs, OpURL) of
         [] -> initiate_assoc(OpURL, Cache, State);
@@ -156,10 +156,10 @@ initiate_assoc(OpURL, Cache, State) ->
     end.
 
 check_expiry(Assoc, AuthReq, Cache, State) ->
-    case timer:now_diff(now(), Assoc#assoc.created) of
-        X when X > (Assoc#assoc.expiresIn * 1000000) ->
+    case timer:now_diff(now(), Assoc#openid_assoc.created) of
+        X when X > (Assoc#openid_assoc.expiresIn * 1000000) ->
             %?DBG(assoc_expired),
-            [OpURL,_] = AuthReq#authReq.opURLs,
+            [OpURL,_] = AuthReq#openid_authreq.opURLs,
             initiate_assoc(OpURL, Cache, State);
         _ ->
             Assoc
@@ -170,7 +170,7 @@ pend_login(UUID, AuthReq, Assoc, State) ->
     %?DBG({pending, UUID, AuthReq, Assoc#assoc.handle}),
     ets:insert(State#state.pending, {UUID, {AuthReq, Assoc}}),
     timer:send_after(?PENDING_TIMEOUT * 1000, {invalidate_pending, UUID}),
-    AuthReq#authReq{assoc=Assoc}.
+    AuthReq#openid_authreq{assoc=Assoc}.
 
 
 %%--------------------------------------------------------------------
@@ -187,7 +187,7 @@ verify_discovered(UUID, Fields, State) ->
     GivenHandle = ?GV("openid.assoc_handle", Fields),
     case ets:lookup(State#state.pending, UUID) of
         [] -> {error, "No pending login"};
-        [{UUID, {AuthReq, #assoc{handle=GivenHandle}=Assoc}}] ->
+        [{UUID, {AuthReq, #openid_assoc{handle=GivenHandle}=Assoc}}] ->
             verify_claimed_id(AuthReq, Assoc, Fields, State);
         _OtherAssoc -> {error, "Invalid association handle"}
     end.
@@ -196,13 +196,13 @@ verify_claimed_id(AuthReq, Assoc, Fields, State) ->
     case ?GVD("openid.claimed_id", Fields, none) of
         none -> {error, "No claimed identifier"};
         ClaimedID ->
-            case AuthReq#authReq.claimedID of
+            case AuthReq#openid_authreq.claimedID of
                 ClaimedID ->
                     verify_nonce(ClaimedID, Assoc, Fields, State);
                 OtherID ->
                     DiscoveredReq = get_authreq(ClaimedID, false, State),
-                    [OpURL|_] = AuthReq#authReq.opURLs,
-                    case lists:any(fun(X) -> X == OpURL end, DiscoveredReq#authReq.opURLs) of
+                    [OpURL|_] = AuthReq#openid_authreq.opURLs,
+                    case lists:any(fun(X) -> X == OpURL end, DiscoveredReq#openid_authreq.opURLs) of
                         true -> verify_nonce(OtherID, Assoc, Fields, State);
                         false -> {error, "Invalid OP endpoint discovered"}
                     end
@@ -246,10 +246,10 @@ verify_signature(ClaimedID, Assoc, Fields) ->
 
 verify_signature(_, _, none, _Fields) ->
     {error, "Direct verification not implemented yet"};
-verify_signature(_ClaimedID, false, #assoc{}=Assoc, Fields) ->
+verify_signature(_ClaimedID, false, #openid_assoc{}=Assoc, Fields) ->
     KV = lists:flatten([[Key,$:,?GV("openid." ++ Key, Fields),$\n]
                         || Key <- string:tokens(?GV("openid.signed", Fields), ",")]),
-    MAC = Assoc#assoc.mac,
+    MAC = Assoc#openid_assoc.mac,
     Sig = crypto:sha_mac(MAC, KV),
     GivenSig = base64:decode(?GV("openid.sig", Fields)),
     
