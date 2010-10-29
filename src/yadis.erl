@@ -46,8 +46,8 @@ retrieve(Identifier) ->
               false -> Normalized
           end,
     
-    case httpc:request(get, {URL, ?HTTP_HEADERS}, ?HTTP_OPTIONS, ?REQ_OPTIONS) of
-        {ok, {_Status, Headers, Body}} ->
+    case openid_http:get(URL) of
+	{ok, 200, Headers, Body} ->
             DescriptorURL = get_descriptor_url(Headers, Body),
             XRDS = handle_response(DescriptorURL, Headers, Body),
             case XRDS of 
@@ -101,8 +101,8 @@ try_descriptor_url(URL) -> retrieve_step_two(URL).
 
 
 retrieve_step_two(YadisURL) ->
-    case httpc:request(get, {YadisURL, ?HTTP_HEADERS}, ?HTTP_OPTIONS, ?REQ_OPTIONS) of
-        {ok, {_Status, Headers, Body}} ->
+    case openid_http:get(YadisURL) of
+	{ok, 200, Headers, Body} ->
             get_xrds(?GVD("content-type", Headers, none), Body);
         Other ->
             {error, {http_error, {step_two, YadisURL, Other}}}

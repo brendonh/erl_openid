@@ -152,9 +152,7 @@ associate(OpURL) ->
 
     ReqBody = openid_pm:url_encode(Params),
 
-    Request = {OpURL, [], ?CONTENT_TYPE, ReqBody},
-
-    {ok, {_,_,Body}} = httpc:request(post, Request, [], []),
+    {ok, 200, _Headers, Body} = openid_http:post(OpURL, ?CONTENT_TYPE, ReqBody),
 
     Response = openid_pm:kvf_decode(Body),
 

@@ -3,3 +3,4 @@ Mnesia.*
 sasl_err*
 erl_crash*
 ebin/openid.app
+deps/*
