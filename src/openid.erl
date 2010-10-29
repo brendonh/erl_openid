@@ -150,13 +150,13 @@ associate(OpURL) ->
               {"openid.dh_gen", base64:encode(roll(MG))},
               {"openid.dh_consumer_public", base64:encode(roll(Public))}],
 
-    ReqBody = mochiweb_util:urlencode(Params),
+    ReqBody = openid_pm:url_encode(Params),
 
     Request = {OpURL, [], ?CONTENT_TYPE, ReqBody},
 
     {ok, {_,_,Body}} = httpc:request(post, Request, [], []),
 
-    Response = parse_keyvalue(Body),
+    Response = openid_pm:kvf_decode(Body),
 
     Handle = ?GV("assoc_handle", Response),
     ExpiresIn = list_to_integer(?GV("expires_in", Response)),
@@ -193,15 +193,6 @@ unroll(Bin) when is_binary(Bin) ->
     <<Size:32, Bin/binary>>.
 
 
-parse_keyvalue(Body) ->
-    lists:reverse(lists:foldl(
-      fun(E, A) -> [split_kv(E, [])|A] end,
-      [], string:tokens(Body, "\n"))).
-
-split_kv([$:|Rest], Buff) -> {lists:reverse(Buff), Rest};
-split_kv([C|Rest], Buff) -> split_kv(Rest, [C|Buff]).
-
-
 %% ------------------------------------------------------------
 %% Authentication
 %% ------------------------------------------------------------
@@ -222,7 +213,7 @@ authentication_url(AuthReq, ReturnTo, Realm) ->
               {"openid.return_to", ReturnTo},
               {"openid.realm", Realm}] ++ IDBits,
     
-    QueryString = mochiweb_util:urlencode(Params),
+    QueryString = openid_pm:uri_encode(Params),
 
     [URL|_] = AuthReq#openid_authreq.opURLs,
 
