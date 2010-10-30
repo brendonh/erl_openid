@@ -12,7 +12,7 @@
 -include("openid.hrl").
 
 %% API
--export([start_link/1, test/0]).
+-export([start_link/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -265,14 +265,3 @@ check_return_id(ReturnTo, Fields) ->
     GivenReturn = ?GV("openid.return_to", Fields),
     % XXX Todo -- do this properly, for people who put fancy stuff in return URLs
     ReturnTo == GivenReturn.
-
-
-
-%%--------------------------------------------------------------------
-%%% Tests
-%%--------------------------------------------------------------------
-
-test() ->
-    {ok, Server} = gen_server:start(?MODULE, start_link, [test_server]),
-    ?DBG({server, Server}),
-    ?DBG({one, gen_server:call(Server, {prepare, "foo", "=brendonh", true})}).

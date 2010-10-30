@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 -module(openid).
 
--export([discover/1, associate/1, authentication_url/3, test/0]).
+-export([discover/1, associate/1, authentication_url/3]).
 
 -include("openid.hrl").
 
@@ -215,65 +215,3 @@ authentication_url(AuthReq, ReturnTo, Realm) ->
     [URL|_] = AuthReq#openid_authreq.opURLs,
 
     list_to_binary([URL, "?", QueryString]).
-
-%% ------------------------------------------------------------
-%% Tests
-%% ------------------------------------------------------------
-
-test() ->
-
-    application:start(inets),
-    application:start(ssl),
-
-    Test = fun(ID) ->
-                   ?DBG({identifier, ID}),
-                   Req = discover(ID),
-                   %?DBG({request, Req}),
-                   [URL,_] = Req#openid_authreq.opURLs,
-                   Assoc = associate(URL),
-                   ?DBG({assoc, Assoc}),
-                   %?DBG({auth, authenticate(Req2, "http://dev.brendonh.org/return", "http://dev.brendonh.org/")}),
-                   ok
-           end,
-
-    % 2.0
-    Test("https://www.google.com/accounts/o8/id"),
-    %Test("http://flickr.com/exbrend"),
-    %Test("=brendonh"),
-
-    % 1.0 / 1.1
-    %?DBG({"AOL:", discover("http://openid.aol.com/brend")}),
-    %?DBG({"Myspace:", discover("www.myspace.com")}),
-    %?DBG({"LiveJournal:", discover("http://exbrend.livejournal.com")}),
-    %?DBG({"PaulBonser:", discover("blog.paulbonser.com")}),
-
-    application:stop(inets). % Avoid error spam from held-open connections
-
-
-
-
-%% $ make test
-%% erlc -o ebin -Wall -v +debug_info src/openid.erl
-%% src/openid.erl:155: Warning: function unroll/1 is unused
-%% erl +W w -pa ebin -noshell -pa ../mochiweb/ebin -s openid test -s init stop
-%% <0.1.0>: {identifier,"https://www.google.com/accounts/o8/id"}
-%% <0.1.0>: {request,{authReq,"https://www.google.com/accounts/o8/ud",
-%%                            {2,0},
-%%                            none,none}}
-%% <0.1.0>: {assoc,{"46800",
-%%                  "AO6d/PJErS+mEYxZNEsr3L/Tz6SvipjoQQW4TN8XxzHXTW8n4POIjk9kUBfl1yQvLF2rEmL4R3OqAKgDVsTIb9WzFF75+QmJXtXq5DqyQ4HRgBqgZk2RmijOHSKsVsZbsA==",
-%%                  "CbImJ5wv7y1jgGCS3RWq5cCvByE="}}
-%% <0.1.0>: {identifier,"http://flickr.com/exbrend"}
-%% <0.1.0>: {request,{authReq,"https://open.login.yahooapis.com/openid/op/auth",
-%%                            {2,0},
-%%                            none,none}}
-%% <0.1.0>: {assoc,{"14400",
-%%                  "EBXqqs44y4MkuvOIVGF+TSUot+/FGqBtMZJm8KyQXwabUc09iB2AesfVb4J2iM2JaPdvk0VgfYur7ywJY9zCZA5bvSNKEOicFP5SAVBsfdCNyCUEjMRt0tvcDAnygWzo",
-%%                  "wBens28gyUh8NzNKVS3IafvWeYE="}}
-%% <0.1.0>: {identifier,"=brendonh"}
-%% <0.1.0>: {request,{authReq,"https://authn.fullxri.com/authentication/",
-%%                            {2,0},
-%%                            "=brendonh",none}}
-%% <0.1.0>: {assoc,{"1800",
-%%                  "AKngKTyiIQ0JcX3/vXrnavfyLWCj6hsiOTYypoKPS25DAaprDRKkq5gXL4q0Foc+YAUqrLlTuT63W6PeVSpZEornRfNHs3Trfoxggp3N4uE8BFvlHvyf1XySXNANPbLLFQ==",
-%%                  "KIW/+jlgDASt3Xx8T7vHfb1F0vU="}}

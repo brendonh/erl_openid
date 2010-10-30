@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 -module(yadis).
 
--export([retrieve/1, test/0]).
+-export([retrieve/1]).
 
 -include("openid.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
@@ -155,46 +155,3 @@ get_local_id(Service, [Tag|Rest]) ->
         [] -> get_local_id(Service, Rest);
         [#xmlElement{content=[Value|_]}|_] -> Value#xmlText.value
     end.
-            
-
-%% ------------------------------------------------------------
-%% Tests
-%% ------------------------------------------------------------
-
--define(P(S), io:format("~p~n", [S])).
-
-test() ->
-
-    ?P({"Google:", retrieve("https://www.google.com/accounts/o8/id")}),         % Direct XRDS response
-    %?P({"AOL:", retrieve("https://api.screenname.aol.com/auth/openidServer")}), % x-xrds-location header
-    ?P({"Flickr:", retrieve("http://flickr.com/exbrend")}),
-    ?P({"LiveJournal:", retrieve("http://exbrend.livejournal.com")}),           % x-xrds-location meta tag
-    ?P({"XRI Brend:", retrieve("=brendonh")}),                                  % Direct XRDS via xri.net
-
-    application:stop(inets). % Avoid error spam from held-open connections
-
-
-%% $ make test
-%% erlc -o ebin -Wall -v +debug_info src/yadis.erl
-%% src/yadis.erl:146: Warning: variable 'Rest' is unused
-%% erl +W w -pa ebin -noshell -s yadis test -s init stop
-%% {"Google:",
-%%  [{["http://specs.openid.net/auth/2.0/server","http://openid.net/srv/ax/1.0",
-%%     "http://specs.openid.net/extensions/ui/1.0/mode/popup",
-%%     "http://specs.openid.net/extensions/ui/1.0/icon",
-%%     "http://specs.openid.net/extensions/pape/1.0"],
-%%    ["https://www.google.com/accounts/o8/ud"]}]}
-%% {"AOL:",
-%%  [{["http://specs.openid.net/auth/2.0/return_to"],
-%%    ["https://api.screenname.aol.com/auth/oidRet"]}]}
-%% {"LiveJournal:",
-%%  [{["http://openid.net/signon/1.0"],
-%%    ["http://www.livejournal.com/openid/server.bml"]}]}
-%% {"XRI Drummond:",
-%%  [{[],["skype:drummondreed?chat"]},
-%%   {[],["skype:drummondreed?call"]},
-%%   {["xri://+i-service*(+forwarding)*($v*1.0)",[]],["http://1id.com/"]},
-%%   {["http://openid.net/signon/1.0"],
-%%    ["http://1id.com/sso/","https://1id.com/sso/"]},
-%%   {["xri://+i-service*(+contact)*($v*1.0)",[]],["http://1id.com/contact/"]}]}
-
