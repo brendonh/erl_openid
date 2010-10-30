@@ -40,7 +40,7 @@ retrieve(Identifier) ->
             XRDS = handle_response(DescriptorURL, Headers, Body),
             case XRDS of 
                 none -> 
-                    {none, Body};
+                    {none, Normalized, Body};
                 #openid_xrds{} -> 
 
                     % XXX Todo -- Normalize DescriptorURL as claimedID 

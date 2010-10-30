@@ -19,7 +19,7 @@
 
 discover(Identifier) ->
     Req = case yadis:retrieve(Identifier) of
-              {none, Body} -> html_discovery(Body);
+              {none, NormalizedId, Body} -> html_discovery(NormalizedId, Body);
               #openid_xrds{}=XRDS -> extract_authreq(XRDS);
               {error, _Error} ->
                   %?DBG({error, Error}),
@@ -81,22 +81,22 @@ build_authReq(XRDS, Service, Version) ->
 		    localID=Service#openid_xrdservice.localID}.
 
 
-html_discovery(Body) ->
-    html_discovery(Body, [{"openid2.provider", "openid2.local_id", {2,0}},
-                          {"openid.server", "openid.delegate", {1,1}}]).
+html_discovery(Id, Body) ->
+    html_discovery(Id, Body, [{"openid2.provider", "openid2.local_id", {2,0}},
+			      {"openid.server", "openid.delegate", {1,1}}]).
 
-html_discovery(_, []) ->
+html_discovery(_Id, _, []) ->
     none;
-html_discovery(Body, [{ProviderRel, LocalIDRel, Version}|Rest]) ->
+html_discovery(Id, Body, [{ProviderRel, LocalIDRel, Version}|Rest]) ->
     case openid_utils:get_tags(Body, "link", "rel", ProviderRel) of
         [Tag|_] ->
             case ?GVD("href", Tag, none) of
                 none -> html_discovery(Body, Rest);
                 URL ->
                     LocalID = html_local_id(Body, LocalIDRel),
-                    #openid_authreq{opURLs=[URL], version=Version, localID=LocalID}
+                    #openid_authreq{opURLs=[URL], version=Version, localID=LocalID, claimedID=Id}
             end;
-        _ -> html_discovery(Body, Rest)
+        _ -> html_discovery(Id, Body, Rest)
     end.
 
 html_local_id(Body, RelName) ->

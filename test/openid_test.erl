@@ -16,8 +16,8 @@ discover2_test_() ->
 	     {"http://flickr.com/exbrend",
 	      #openid_authreq{opURLs = ["https://open.login.yahooapis.com/openid/op/auth"],
 			      version = {2,0},
-			      claimedID = "http://specs.openid.net/auth/2.0/identifier_select",
-			      localID = "http://specs.openid.net/auth/2.0/identifier_select",
+			      claimedID = "http://flickr.com/exbrend",
+			      localID = "http://flickr.com/exbrend",
 			      assoc = none}}
 	    ],
     {setup, fun setup/0, [?_assertEqual(Result, openid:discover(URL))
@@ -27,8 +27,8 @@ discover1_test_() ->
     Cases = [{"blog.paulbonser.com",
 	      #openid_authreq{opURLs = ["http://www.livejournal.com/openid/server.bml"],
 			      version = {1,1},
-			      claimedID = "http://specs.openid.net/auth/2.0/identifier_select",
-			      localID = "http://specs.openid.net/auth/2.0/identifier_select",
+			      claimedID = "http://blog.paulbonser.com/",
+			      localID = "http://misterpib.livejournal.com/",
 			      assoc = none}}
 	    ],
     {setup, fun setup/0, [?_assertEqual(Result, openid:discover(URL))

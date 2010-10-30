@@ -28,5 +28,5 @@ retrieve_test_() ->
 	      #openid_xrds{origID = "=brendonh",claimedID = "=brendonh",
 			   canonicalID = none,isXRI = true,services = []}}
 	    ],
-    {setup, fun setup/0, [?_assertEqual(Result, yadis:retrieve(URL))
+    {setup, fun setup/0, [?_test(?_assertEqual(Result, yadis:retrieve(URL)))
 			  || {URL, Result} <- Cases ]}.
