@@ -25,8 +25,6 @@
 
      
 retrieve(Identifier) ->
-    application:start(inets),
-    application:start(ssl),
     
     Normalized = openid_utils:normalize_id(Identifier),
     IsXRI = lists:member(hd(Normalized), ?XRI_GCTX_SYMBOLS),

@@ -130,7 +130,6 @@ get_identity_params(ClaimedID, LocalID) ->
 -define(CONTENT_TYPE, "application/x-www-form-urlencoded; charset=UTF-8").
 
 associate(OpURL) ->
-    application:start(crypto),
 
     MP = crypto:mpint(?P),
     MG = crypto:mpint(?G),
