@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 -module(yadis).
 
--export([normalize/1, retrieve/1, test/0]).
+-export([retrieve/1, test/0]).
 
 -include("openid.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
@@ -23,23 +23,13 @@
 %% API
 %% ------------------------------------------------------------
 
-normalize("xri://" ++ Identifier) -> {Identifier, true};
-normalize([$=|_]=Identifier) -> {Identifier, true};
-normalize([$@|_]=Identifier) -> {Identifier, true};
-normalize([$+|_]=Identifier) -> {Identifier, true};
-normalize([$$|_]=Identifier) -> {Identifier, true};
-normalize([$!|_]=Identifier) -> {Identifier, true};
-normalize([$(|_]=Identifier) -> {Identifier, true};
-normalize("http://" ++ Tail) -> {strip_fragment("http://" ++ Tail), false};
-normalize("https://" ++ Tail) -> {strip_fragment("https://" ++ Tail), false};
-normalize(PartialURL) -> {strip_fragment("http://" ++ PartialURL), false}.
      
-
 retrieve(Identifier) ->
     application:start(inets),
     application:start(ssl),
     
-    {Normalized, IsXRI} = normalize(Identifier),
+    Normalized = openid_utils:normalize_id(Identifier),
+    IsXRI = lists:member(hd(Normalized), ?XRI_GCTX_SYMBOLS),
     
     URL = case IsXRI of
               true -> resolve(Normalized);
@@ -76,13 +66,6 @@ retrieve(Identifier) ->
 %% ------------------------------------------------------------
 
 resolve(Identifier) -> "http://xri.net/" ++ Identifier ++ "?_xrd_r=application/xrds+xml".
-
-strip_fragment(URL) -> strip_fragment(URL, []).
-
-strip_fragment([$#|_], SoFar) -> lists:reverse(SoFar);
-strip_fragment([], SoFar) -> lists:reverse(SoFar);
-strip_fragment([H|T], SoFar) -> strip_fragment(T, [H|SoFar]).
-
 
 
 handle_response(none, Headers, Body) ->

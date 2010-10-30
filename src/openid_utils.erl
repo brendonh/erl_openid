@@ -7,9 +7,13 @@
 %%%-------------------------------------------------------------------
 -module(openid_utils).
 
--export([get_tags/2, get_tags/4, url_encode/1, url_decode/1, uri_encode/1, uri_decode/1]).
+-export([get_tags/2, get_tags/4]).
+-export([url_encode/1, url_decode/1]).
+-export([uri_encode/1, uri_decode/1]).
+-export([normalize_id/1, normalize_http/1]).
 
 -include("openid.hrl").
+-include("deps/ibrowse/src/ibrowse.hrl").
 
 get_tags(Content, Tag) ->
     find_tags(Content, {[], Tag, none, none}).
@@ -63,6 +67,104 @@ check_val(V, V, PropList, Tail, {Buffer,Tag,Key,Val})->
     find_tags(Tail, {[PropList|Buffer],Tag,Key,Val});
 check_val(_, _, _, Tail, State) ->
     find_tags(Tail, State).
+
+normalize_id(Identifier) ->
+    Max = 1000000000,
+    Scheme = lists:sublist(Identifier, 8),
+    case string:to_lower(Scheme) of
+	"xri://" ++ _ ->
+	    lists:sublist(Identifier, 7, Max);
+	"http://" ++ _ ->
+	    Components = lists:sublist(Identifier, 8, Max),
+	    normalize_http("http://" ++ Components);
+	"https://" ++ _ ->
+	    Components = lists:sublist(Identifier, 9, Max),
+	    normalize_http("https://" ++ Components);
+	[H|_] ->
+	    case lists:member(H, ?XRI_GCTX_SYMBOLS) of
+		true -> Identifier;
+		false -> normalize_http("http://" ++ Identifier)
+	    end
+    end.
+
+normalize_http(URL) ->
+    #url{host=Host, port=Port, username=Username, password=Password, path=Path, protocol=Protocol} = ibrowse_lib:parse_url(URL),
+    NewProtocol = atom_to_list(Protocol) ++ "://",
+    NewCreds = case {Username, Password} of
+		   {undefined, undefined} -> "";
+		   {Username, ""} -> Username ++ "@";
+		   {Username, Password} -> Username ++ ":" ++ Password ++ "@"
+	       end,
+    NewHost = normalize_host(Host),
+    NewPort = case {Protocol, Port} of
+		  {http, 80} -> "";
+		  {https, 443} -> "";
+		  _ -> ":" ++ integer_to_list(Port)
+	      end,
+    NewPath = normalize_path(Path),
+    NewProtocol ++ NewCreds ++ NewHost ++ NewPort ++ [$/|NewPath].
+
+normalize_host(Host) when is_list(Host) ->
+    [ normalize_host(C) || C <- Host ];
+normalize_host(C) when is_integer(C) andalso (C >= $A) andalso (C =< $Z) ->
+    C + 32;
+normalize_host(C) when is_integer(C) -> C.
+
+normalize_path([]) -> "";
+normalize_path(Path) when is_list(Path) ->
+    FragFreePath = remove_path_fragment(Path),
+    {BarePath, QueryString} = lists:splitwith(fun(X) -> X =/= $? end, FragFreePath),
+    FinalSlash = hd(lists:reverse(BarePath)) =:= $/,
+    NewQueryString = normalise_querystring(QueryString),
+    Segments = string:tokens(BarePath, "/"),
+    DotFreeSegments = remove_dot_segments(Segments),
+    PESegments = pe_normalise_segments(DotFreeSegments),
+    NewPath = string:join(PESegments, "/"),
+    case NewPath of
+	[] -> "" ++ NewQueryString;
+	NewPath when FinalSlash -> NewPath ++ "/" ++ NewQueryString;
+	NewPath -> NewPath ++ NewQueryString
+    end.
+    
+remove_path_fragment(Path) -> remove_path_fragment(Path, []).
+remove_path_fragment([$#|_], SoFar) -> lists:reverse(SoFar);
+remove_path_fragment([], SoFar) -> lists:reverse(SoFar);
+remove_path_fragment([H|T], SoFar) -> remove_path_fragment(T, [H|SoFar]).
+
+remove_dot_segments(Segments) ->
+    remove_dot_segments([], Segments).
+
+remove_dot_segments(Path, []) ->
+    lists:reverse(Path);
+remove_dot_segments([_|Path], [".."|Rest]) ->
+    remove_dot_segments(Path, Rest);
+remove_dot_segments(Path, ["."|Rest]) ->
+    remove_dot_segments(Path, Rest);
+remove_dot_segments(Path, [Seg|Rest]) ->
+    remove_dot_segments([Seg|Path], Rest).
+
+pe_normalise_segments(Segments) when is_list(Segments) ->
+    [ pe_normalise_segment(Segment) || Segment <- Segments ].
+pe_normalise_segment(Segment) ->
+    RemovePE = uri_decode(Segment),
+    openid_utils:uri_encode(RemovePE).
+
+normalise_querystring("") -> "";
+normalise_querystring([$?|QS]) ->
+    Params = string:tokens(QS, "&"),
+    NewParams = lists:foldr(
+		  fun(Param, Acc) ->
+			  NewParam = case lists:splitwith(fun(X) -> X =/= $= end, Param) of
+					 {Key, ""} -> uri_encode(uri_decode(Key));
+					 {Key, [$=|Value]} ->
+					     NewKey = uri_encode(uri_decode(Key)),
+					     NewValue = uri_encode(uri_decode(Value)),
+					     NewKey ++ "=" ++ NewValue
+				     end,
+			  [NewParam|Acc]
+		  end, [], Params),
+    NewQS = string:join(NewParams, "&"),
+    "?" ++ NewQS.
 
 %% Sourced with permission from Tim's repo at
 %% http://github.com/tim/erlang-percent-encoding/blob/master/src/percent.erl
