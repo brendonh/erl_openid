@@ -12,7 +12,7 @@
 -include("openid.hrl").
 
 %% API
--export([start_link/1]).
+-export([start_link/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -32,11 +32,8 @@
 -define(NONCE_TIMEOUT, 600).
 
 
-%%====================================================================
-%% API
-%%====================================================================
-start_link(Name) ->
-    gen_server:start_link({local, Name}, ?MODULE, [], []).
+start_link() ->
+    gen_server:start_link({local, openid_srv}, ?MODULE, [], []).
 
 
 %%====================================================================
@@ -186,12 +183,21 @@ verify_return(UUID, ReturnTo, Fields, State) ->
 verify_discovered(UUID, Fields, State) ->
     GivenHandle = ?GV("openid.assoc_handle", Fields),
     case ets:lookup(State#state.pending, UUID) of
-        [] -> {error, "No pending login"};
+        [] ->
+            verify_claimed_id(none, none, Fields, State);
         [{UUID, {AuthReq, #openid_assoc{handle=GivenHandle}=Assoc}}] ->
             verify_claimed_id(AuthReq, Assoc, Fields, State);
         _OtherAssoc -> {error, "Invalid association handle"}
     end.
 
+% This is the non-associated (direct verification path)
+verify_claimed_id(none, Assoc, Fields, State) ->
+    case ?GVD("openid.claimed_id", Fields, none) of
+        none -> {error, "No claimed identifier"};
+        ClaimedID ->
+            verify_nonce(ClaimedID, Assoc, Fields, State)
+    end;
+% This is verification through previous association
 verify_claimed_id(AuthReq, Assoc, Fields, State) ->
     case ?GVD("openid.claimed_id", Fields, none) of
         none -> {error, "No claimed identifier"};
@@ -230,9 +236,9 @@ verify_nonce(ClaimedID, Assoc, Fields, State) ->
     end.
 
 
-verify_nonce2(ClaimedID, Nonce, Assoc, Fields, State) -> 
+verify_nonce2(ClaimedID, Nonce, Assoc, Fields, State) ->
     case ets:lookup(State#state.nonces, Nonce) of
-        [] -> 
+        [] ->
             ets:insert(State#state.nonces, {Nonce, true}),
             timer:send_after(?NONCE_TIMEOUT * 1000, {remove_nonce, Nonce}),
             verify_signature(ClaimedID, Assoc, Fields);
@@ -244,20 +250,32 @@ verify_signature(ClaimedID, Assoc, Fields) ->
     Invalidate = ?GVD("openid.invalidate_handle", Fields, false),
     verify_signature(ClaimedID, Invalidate, Assoc, Fields).
 
-verify_signature(_, _, none, _Fields) ->
-    {error, "Direct verification not implemented yet"};
+% Direct verification
+verify_signature(_ClaimedID, _Invalidate, none, Fields) ->
+    NewParams = proplists:delete("openid.mode", Fields) ++ [{"openid.mode", "check_authentication"}],
+    ClaimURL = ?GV("openid.op_endpoint", Fields),
+    BodyString = openid_pm:url_encode(NewParams),
+    {ok, "200", _Headers, Response} =
+        ibrowse:send_req(ClaimURL, [{"Content-Type", "application/x-www-form-urlencoded"}], post, BodyString),
+    TokenizedResponse = string:tokens(Response, "\n"),
+    ResultPropList =
+        lists:map(fun(Tokenized) -> [H|[H2|_T]] = string:tokens(Tokenized, ":"), {H, H2}  end, TokenizedResponse),
+    case ?GV("is_valid", ResultPropList) =:= "true" of
+        true -> {ok, ?GV("openid.claimed_id", Fields)};
+        false -> {error, "cannot verify"}
+    end;
 verify_signature(_ClaimedID, false, #openid_assoc{}=Assoc, Fields) ->
     KV = lists:flatten([[Key,$:,?GV("openid." ++ Key, Fields),$\n]
                         || Key <- string:tokens(?GV("openid.signed", Fields), ",")]),
     MAC = Assoc#openid_assoc.mac,
     Sig = crypto:sha_mac(MAC, KV),
     GivenSig = base64:decode(?GV("openid.sig", Fields)),
-    
+
     case Sig =:= GivenSig of
         true -> {ok, ?GV("openid.claimed_id", Fields)};
         false -> {error, "invalid signature"}
     end;
-verify_signature(_, _, _, _) ->    
+verify_signature(_, _, _, _) ->
     {error, "Association invalidated, and direct verification not implemented yet"}.
 
 

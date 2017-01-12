@@ -6,12 +6,25 @@
 %%% Created : 18 Sep 2009 by Brendon Hogger <brendonh@dev.brendonh.org>
 %%%-------------------------------------------------------------------
 -module(openid).
-
--export([discover/1, associate/1, authentication_url/3]).
-
+-behavior(application).
 -include("openid.hrl").
 
+% Library functions
+-export([discover/1, associate/1, authentication_url/3, verify/1]).
+% Application
+-export([start/2, stop/1]).
 
+start(normal, _Args) ->
+    openid_srv:start_link().
+
+stop(_State) ->
+    ok.
+
+%% ------------------------------------------------------------
+%% Verification
+%% ------------------------------------------------------------
+verify({UUID, ReturnTo, Fields}) ->
+    gen_server:call(openid_srv, {verify, UUID, ReturnTo, Fields}).
 
 %% ------------------------------------------------------------
 %% Discovery
@@ -195,8 +208,13 @@ unroll(Bin) when is_binary(Bin) ->
 %% ------------------------------------------------------------
 
 authentication_url(AuthReq, ReturnTo, Realm) ->
-    
+
     Assoc = AuthReq#openid_authreq.assoc,
+
+    AssocBits = case Assoc of
+                    none -> [];
+                    _ -> [{"openid.assoc_handle", Assoc#openid_assoc.handle}]
+                end,
     
     IDBits = case AuthReq#openid_authreq.claimedID of
                  none -> [];
@@ -206,9 +224,8 @@ authentication_url(AuthReq, ReturnTo, Realm) ->
 
     Params = [{"openid.ns", "http://specs.openid.net/auth/2.0"},
               {"openid.mode", "checkid_setup"},
-              {"openid.assoc_handle", Assoc#openid_assoc.handle},
               {"openid.return_to", ReturnTo},
-              {"openid.realm", Realm}] ++ IDBits,
+              {"openid.realm", Realm}] ++ IDBits ++ AssocBits,
     
     QueryString = openid_pm:uri_encode(Params),
 
